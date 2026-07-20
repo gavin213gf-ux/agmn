@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>A股看盘模拟交易台账</title>
+<style>
+  :root{
+    --bg:#06090F; --surface:#0C1219; --surface-2:#111C26; --border:#1C2A38; --border-soft:#152029;
+    --text:#F2F6FA; --muted:#93A1B1; --muted-2:#5E6B7A;
+    --accent:#2DD4BF; --accent-2:#38BDF8; --accent-soft:rgba(45,212,191,.14);
+    --up:#F6685E; --down:#34D399; --warn:#F5B14C;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{background:var(--bg);}
+  body{color:var(--text); font-family:system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; font-size:16px; line-height:1.6; -webkit-font-smoothing:antialiased;}
+  .num{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-variant-numeric:tabular-nums;}
+  .wrap{max-width:1440px; margin:0 auto; padding:28px 32px 64px;}
+  .up{color:var(--up);} .down{color:var(--down);} .warn{color:var(--warn);} .accent{color:var(--accent);} .neu{color:var(--text);} .flat{color:var(--muted);} .dim{color:var(--muted-2);}
+
+  .topbar{display:flex; align-items:center; justify-content:space-between; padding:18px 0 22px; border-bottom:1px solid var(--border); margin-bottom:26px; gap:16px; flex-wrap:wrap;}
+  .brand{display:flex; align-items:baseline; gap:12px; flex-wrap:wrap;}
+  .brand h1{font-size:25px; font-weight:700; letter-spacing:.01em; display:flex; align-items:center; gap:10px;}
+  .brand .sub{font-size:13px; color:var(--muted);}
+  .mode{font-size:12px; padding:3px 11px; border-radius:6px; font-weight:600; display:inline-flex; align-items:center; gap:6px;}
+  .mode.local{background:rgba(147,161,177,.16); color:var(--muted);}
+  .mode.shared{background:rgba(45,212,191,.16); color:var(--accent);}
+  .mode.shared::before{content:""; width:7px; height:7px; border-radius:50%; background:var(--accent); box-shadow:0 0 8px var(--accent);}
+  .actions{display:flex; gap:10px; flex-wrap:wrap;}
+  .btn{font-size:14px; padding:9px 16px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); cursor:pointer; transition:all .15s; font-weight:500;}
+  .btn:hover{border-color:var(--accent); color:var(--accent);}
+  .btn-primary{background:var(--accent); border-color:var(--accent); color:#04201C; font-weight:600;}
+  .btn-primary:hover{filter:brightness(1.08); color:#04201C;}
+
+  .stats-hero{display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:16px;}
+  .kpi{position:relative; overflow:hidden; padding:22px 24px; background:linear-gradient(155deg,var(--surface-2),var(--surface)); border:1px solid var(--border); border-radius:14px; transition:transform .15s, border-color .15s;}
+  .kpi:hover{transform:translateY(-2px); border-color:var(--accent);}
+  .kpi::before{content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--accent); opacity:.65;}
+  .kpi .k{font-size:13px; color:var(--muted); letter-spacing:.05em; margin-bottom:12px;}
+  .kpi .v{font-size:30px; font-weight:700; line-height:1.1;}
+  .kpi .v.sm{font-size:22px;}
+
+  .stats-sub{display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-bottom:28px;}
+  .mini{padding:18px 20px; background:var(--surface); border:1px solid var(--border); border-radius:12px;}
+  .mini .k{font-size:12px; color:var(--muted); letter-spacing:.03em; margin-bottom:9px;}
+  .mini .v{font-size:19px; font-weight:600;}
+
+  .toolbar{display:flex; align-items:center; gap:12px; margin-bottom:18px; flex-wrap:wrap;}
+  .search{flex:1; min-width:220px; background:var(--surface); border:1px solid var(--border); border-radius:9px; padding:11px 14px; color:var(--text); font-size:14px;}
+  .search::placeholder{color:var(--muted-2);}
+  .search:focus{outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft);}
+  .chip{font-size:13px; padding:9px 18px; border-radius:20px; border:1px solid var(--border); background:var(--surface); color:var(--muted); cursor:pointer; font-weight:500; transition:all .15s;}
+  .chip:hover{border-color:var(--accent); color:var(--accent);}
+  .chip.on{background:var(--accent-soft); color:var(--accent); border-color:var(--accent);}
+  .sort{background:var(--surface); border:1px solid var(--border); border-radius:9px; padding:11px 12px; color:var(--text); font-size:14px;}
+
+  .tbl-wrap{overflow-x:auto; border:1px solid var(--border); border-radius:14px; background:var(--surface);}
+  .tbl{width:100%; border-collapse:collapse; min-width:960px;}
+  .tbl th{font-size:12px; color:var(--muted); font-weight:600; text-align:left; padding:14px 16px; border-bottom:1px solid var(--border); letter-spacing:.04em; background:#0A0F15; white-space:nowrap;}
+  .tbl td{padding:15px 16px; border-bottom:1px solid var(--border-soft); font-size:14px; vertical-align:middle; white-space:nowrap;}
+  .tbl tbody tr{transition:background .12s;}
+  .tbl tbody tr:hover td{background:rgba(45,212,191,.05);}
+  .tbl tbody tr:hover td:first-child{box-shadow:inset 3px 0 0 var(--accent);}
+  .tbl .r{text-align:right;}
+  .code{font-weight:700; font-size:15px;} .nm{color:var(--muted); font-size:13px; margin-top:1px;}
+  .tag{display:inline-block; font-size:12px; padding:3px 11px; border-radius:6px; font-weight:600;}
+  .tag.done{background:rgba(45,212,191,.14); color:var(--accent);}
+  .tag.open{background:rgba(245,177,76,.14); color:var(--warn);}
+  .op{color:var(--muted); cursor:pointer; margin-right:14px; font-size:13px; font-weight:500;}
+  .op:hover{color:var(--accent);}
+  .op.del:hover{color:var(--up);}
+  .empty{padding:48px; text-align:center; color:var(--muted); font-size:14px;}
+
+  .overlay{position:fixed; inset:0; background:rgba(3,5,9,.72); display:none; align-items:flex-start; justify-content:center; padding:48px 16px; backdrop-filter:blur(6px); z-index:30; overflow:auto;}
+  .overlay.show{display:flex;}
+  .modal{width:680px; max-width:100%; background:var(--surface-2); border:1px solid var(--border); border-radius:16px; overflow:hidden; margin:auto 0; box-shadow:0 24px 60px rgba(0,0,0,.5);}
+  .modal h2{font-size:18px; font-weight:700; padding:20px 24px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;}
+  .modal .set{font-size:12px; color:var(--muted); font-weight:400;}
+  .form{padding:22px 24px; display:grid; grid-template-columns:1fr 1fr; gap:16px 18px;}
+  .field{display:flex; flex-direction:column; gap:7px;}
+  .field.full{grid-column:1 / -1;}
+  .field label{font-size:13px; color:var(--muted); font-weight:500;}
+  .field input, .field textarea{background:#070C12; border:1px solid var(--border); border-radius:9px; padding:11px 13px; color:var(--text); font-size:14px; font-family:inherit; width:100%;}
+  .field input:focus, .field textarea:focus{outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft);}
+  .field textarea{resize:vertical; min-height:60px;}
+  .hint{font-size:12px; color:var(--muted-2); line-height:1.6;}
+  .hint b{color:var(--accent); font-weight:600;}
+  .hint.warn{color:var(--warn);}
+  .modal-foot{grid-column:1 / -1; display:flex; justify-content:flex-end; gap:12px; padding-top:6px;}
+  .err{color:var(--up); font-size:13px; grid-column:1 / -1;}
+
+  .toast{position:fixed; left:50%; bottom:30px; transform:translateX(-50%) translateY(20px); background:var(--surface-2); border:1px solid var(--border); color:var(--text); padding:12px 22px; border-radius:10px; font-size:14px; opacity:0; pointer-events:none; transition:opacity .2s, transform .2s; z-index:50; box-shadow:0 10px 30px rgba(0,0,0,.4);}
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+
+  .foot{margin-top:22px; font-size:12px; color:var(--muted-2); line-height:1.8;}
+
+  @media (max-width:1100px){ .stats-hero{grid-template-columns:repeat(2,1fr);} .stats-sub{grid-template-columns:repeat(3,1fr);} }
+  @media (max-width:860px){
+    .wrap{padding:22px 18px 50px;}
+    .topbar{flex-direction:column; align-items:flex-start;}
+    .tbl{min-width:0; width:100%;}
+    .tbl thead{display:none;}
+    .tbl, .tbl tbody, .tbl tr, .tbl td{display:block; width:100%;}
+    .tbl tr{border:1px solid var(--border); border-radius:12px; margin:0 0 14px; padding:4px 2px; background:var(--surface);}
+    .tbl td{border:none; display:flex; justify-content:space-between; align-items:center; padding:10px 16px; text-align:right; white-space:normal; box-shadow:none !important;}
+    .tbl td::before{content:attr(data-label); color:var(--muted); font-size:12px; text-align:left; margin-right:14px; flex-shrink:0;}
+    .tbl td.r{text-align:right;}
+    .code{font-size:16px;}
+  }
+  @media (max-width:620px){ .stats-hero{grid-template-columns:1fr;} .stats-sub{grid-template-columns:repeat(2,1fr);} .form{grid-template-columns:1fr;} }
+
+  /* 买入逻辑截断 */
+  .logic-cell{max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--muted); font-size:13px;}
+  /* 卖出笔次管理 */
+  .sell-summary{font-size:13px; color:var(--muted); margin-bottom:12px; line-height:1.7;}
+  .sell-summary b{color:var(--text); font-weight:600;}
+  .sell-leg-list{display:flex; flex-direction:column; gap:12px; margin-bottom:12px;}
+  .sell-leg{border:1px solid var(--border); border-radius:12px; padding:14px 16px; background:rgba(255,255,255,.02);}
+  .sell-leg-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;}
+  .sell-leg-head span{font-size:13px; font-weight:600; color:var(--accent);}
+  .sell-leg-grid{display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:12px;}
+  .sell-leg .field label{font-size:12px;}
+  .sell-leg .field input, .sell-leg .field textarea{font-size:13px; padding:9px 11px;}
+  .sell-leg-foot{font-size:12px; color:var(--muted); margin-top:8px;}
+  .add-leg{margin-top:4px; align-self:flex-start; border-style:dashed;}
+  @media (max-width:620px){ .sell-leg-grid{grid-template-columns:1fr 1fr;} }
+  /* 详情弹窗 */
+  .detail-sec{margin-bottom:18px;}
+  .detail-sec h3{font-size:13px; color:var(--accent); margin-bottom:10px; letter-spacing:.04em;}
+  .detail-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px 18px;}
+  .detail-row{display:flex; justify-content:space-between; gap:12px; font-size:14px; padding:6px 0; border-bottom:1px dashed var(--border-soft);}
+  .detail-row .k{color:var(--muted);}
+  .detail-row .v{font-weight:500; text-align:right;}
+  .detail-logic{font-size:13px; color:var(--text); line-height:1.7; background:rgba(45,212,191,.06); border:1px solid var(--border-soft); border-radius:10px; padding:12px 14px; white-space:pre-wrap;}
+  .detail-summary{display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-top:6px;}
+  .leg-tbl{width:100%; border-collapse:collapse;}
+  .leg-tbl th{font-size:11px; color:var(--muted); text-align:left; padding:8px 10px; border-bottom:1px solid var(--border);}
+  .leg-tbl td{font-size:13px; padding:9px 10px; border-bottom:1px solid var(--border-soft);}
+  .leg-tbl td.r, .leg-tbl th.r{text-align:right;}
+  @media (max-width:620px){ .detail-grid{grid-template-columns:1fr;} .detail-summary{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div class="brand">
+      <h1>A股看盘模拟交易台账<span id="modeTag" class="mode local">本机</span></h1>
+      <span class="sub" id="capSub">模拟总资金 ¥1,000,000 · 单股≤30%</span>
+    </div>
+    <div class="actions">
+      <button class="btn" id="btnRefresh">↻ 刷新</button>
+      <button class="btn" id="btnSettings">⚙ 设置</button>
+      <button class="btn" id="btnImport">导入 JSON</button>
+      <button class="btn" id="btnExport">导出 JSON</button>
+      <button class="btn btn-primary" id="btnNew">+ 新建记录</button>
+    </div>
+  </div>
+
+  <div class="stats-hero" id="statsHero"></div>
+  <div class="stats-sub" id="statsSub"></div>
+
+  <div class="toolbar">
+    <input class="search" id="search" placeholder="搜索代码 / 名称…">
+    <span class="chip on" data-filter="all">全部</span>
+    <span class="chip" data-filter="done">已平</span>
+    <span class="chip" data-filter="open">持仓中</span>
+    <select class="sort" id="sort">
+      <option value="sellTime">按卖出时间 ↓</option>
+      <option value="pnlAmt">按盈亏金额 ↓</option>
+      <option value="pnlPct">按盈亏比例 ↓</option>
+      <option value="buyTime">按买入时间 ↓</option>
+    </select>
+  </div>
+
+  <div class="tbl-wrap">
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th>代码 / 名称</th><th>买入逻辑</th><th>买入时间</th><th class="r">买入价 / 涨幅</th>
+          <th class="r">卖出价 / 涨幅</th><th class="r">当前价</th>
+          <th class="r">盈亏比例</th><th class="r">盈亏金额</th>
+          <th>状态</th><th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+  <div class="foot">红色 = 盈利 / 上涨，绿色 = 亏损 / 下跌（A 股红涨绿跌）。持仓中记录填「当前价」即显示浮盈浮亏。挂服务器时为多人共享账本（自动每 8 秒刷新）；双击本地打开时为单机浏览器存储。需多人共享时在 HTML 同目录运行 <span class="num">node server.js</span> 即可。· 模拟盘，非实盘建议。</div>
+</div>
+
+<!-- 新建 / 编辑 弹窗 -->
+<div class="overlay" id="modal">
+  <div class="modal">
+    <h2><span id="modalTitle">新建交易记录</span><span class="set" id="modalSet"></span></h2>
+    <div class="form" id="form">
+      <input type="hidden" id="f_id">
+      <div class="field"><label>股票代码</label><input id="f_code" placeholder="如 600519"></div>
+      <div class="field"><label>股票名称</label><input id="f_name" placeholder="如 贵州茅台"></div>
+      <div class="field"><label>买入时间</label><input type="datetime-local" id="f_buyTime"></div>
+      <div class="field"><label>买入价</label><input type="number" step="0.01" id="f_buyPrice" placeholder="0.00"></div>
+      <div class="field"><label>买入时涨幅(当日%)</label><input type="number" step="0.01" id="f_buyChangePct" placeholder="可选"></div>
+      <div class="field">
+        <label>数量(股)</label><input type="number" step="1" id="f_quantity" placeholder="自动算出">
+        <div class="hint" id="qtyHint"></div>
+      </div>
+      <div class="field full">
+        <label>卖出记录（支持分批卖出）</label>
+        <div class="sell-summary" id="sellSummary"></div>
+        <div class="sell-leg-list" id="sellLegList"></div>
+        <button type="button" class="btn add-leg" id="btnAddLeg">➕ 添加一笔卖出</button>
+      </div>
+      <div class="field"><label>当前价（持仓中/部分卖出填，算浮盈）</label><input type="number" step="0.01" id="f_curPrice" placeholder="未卖出可留空"></div>
+      <div class="field full"><label>买入逻辑</label><textarea id="f_buyLogic" placeholder="为什么买？看盘依据、技术位、消息面…"></textarea></div>
+      <div class="field full"><label>备注</label><input id="f_note" placeholder="可选"></div>
+      <div class="err" id="formErr"></div>
+      <div class="modal-foot">
+        <button class="btn" id="btnCancel">取消</button>
+        <button class="btn btn-primary" id="btnSave">保存记录</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 设置 弹窗 -->
+<div class="overlay" id="setModal">
+  <div class="modal" style="width:420px;">
+    <h2>设置</h2>
+    <div class="form">
+      <div class="field full"><label>模拟总资金（元）</label><input type="number" step="10000" id="s_capital"></div>
+      <div class="field full"><label>单股买入上限比例（%）</label><input type="number" step="1" id="s_maxPct"></div>
+      <div class="field full"><button class="btn btn-ghost" id="btnClear" style="border-color:var(--up); color:var(--up);">清空全部记录</button></div>
+      <div class="modal-foot">
+        <button class="btn" id="btnSetCancel">取消</button>
+        <button class="btn btn-primary" id="btnSetSave">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 确认 弹窗 -->
+<div class="overlay" id="confirmModal">
+  <div class="modal" style="width:380px;">
+    <h2 id="confirmTitle">确认</h2>
+    <div class="form">
+      <div class="field full" id="confirmMsg" style="color:var(--muted); font-size:13px;"></div>
+      <div class="modal-foot">
+        <button class="btn" id="confirmCancel">取消</button>
+        <button class="btn btn-primary" id="confirmOk">确定</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 详情 弹窗 -->
+<div class="overlay" id="detailModal">
+  <div class="modal" style="width:720px;">
+    <h2>交易详情</h2>
+    <div id="detailBody" style="padding:22px 24px;"></div>
+    <div style="display:flex; justify-content:flex-end; gap:12px; padding:0 24px 22px;">
+      <button class="btn" id="btnDetailClose">关闭</button>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="fileInput" accept=".json,application/json" style="display:none;">
+<div class="toast" id="toast"></div>
+
+
+
+<script>
+(function(){
+  "use strict";
+  const LS_TRADES = "astock_sim_trades_v1";
+  const LS_SETTINGS = "astock_sim_settings_v1";
+  const VERSION = 1;
+  const API = "/api";
+
+  let trades = [];
+  let settings = { capital: 1000000, maxPct: 0.30 };
+  let filter = "all";
+  let search = "";
+  let sortMode = "sellTime";
+  let lastSuggestedQty = null;
+  let sellLegs = [];
+  let backendMode = false;
+
+  // ---------- 存储层（后端 / 本地 双实现） ----------
+  function lsGet(k, def){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):def; }catch(e){ return def; } }
+  function lsSet(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+  async function detectBackend(){
+    try{
+      const c = new AbortController(); const to = setTimeout(()=>c.abort(), 1000);
+      const r = await fetch(API+"/data", { signal:c.signal }); clearTimeout(to);
+      backendMode = r.ok;
+    }catch(e){ backendMode = false; }
+  }
+  async function apiGetAll(){
+    if(backendMode){ const r = await fetch(API+"/data"); return await r.json(); }
+    return { trades: lsGet(LS_TRADES, []), settings: lsGet(LS_SETTINGS, { capital:1000000, maxPct:0.30 }) };
+  }
+  async function apiAdd(t){
+    if(backendMode){ const r = await fetch(API+"/trades", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(t) }); const s = await r.json(); trades.push(s); return s; }
+    if(!t.id) t.id = genId(); trades.push(t); lsSet(LS_TRADES, trades); return t;
+  }
+  async function apiUpdate(t){
+    if(backendMode){ const r = await fetch(API+"/trades/"+encodeURIComponent(t.id), { method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify(t) }); const s = await r.json(); const i = trades.findIndex(x=>x.id===t.id); if(i>=0) trades[i]=s; return s; }
+    const i = trades.findIndex(x=>x.id===t.id); if(i>=0) trades[i]=t; lsSet(LS_TRADES, trades); return t;
+  }
+  async function apiRemove(id){
+    if(backendMode){ try{ await fetch(API+"/trades/"+encodeURIComponent(id), { method:"DELETE" }); }catch(e){} }
+    trades = trades.filter(x=>x.id!==id); lsSet(LS_TRADES, trades);
+  }
+  async function apiSaveSettings(s){
+    settings = s;
+    if(backendMode){ try{ await fetch(API+"/settings", { method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify(s) }); }catch(e){} }
+    else lsSet(LS_SETTINGS, s);
+  }
+  async function apiBulk(obj){
+    if(backendMode){ await fetch(API+"/bulk", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(obj) }); const d = await apiGetAll(); trades = d.trades||[]; settings = d.settings||settings; }
+    else {
+      if(obj.mode==="merge"){ const map={}; trades.forEach(t=>map[t.id]=t); (obj.trades||[]).forEach(t=>map[t.id]=normalize(t)); trades=Object.values(map); }
+      else { trades = (obj.trades||[]).map(normalize); }
+      if(obj.settings) settings = obj.settings;
+      lsSet(LS_TRADES, trades); lsSet(LS_SETTINGS, settings);
+    }
+  }
+
+  // ---------- 工具 ----------
+  function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
+  function num(v){ const n = parseFloat(v); return isNaN(n)?null:n; }
+  function fmtMoney(n){ if(n==null||isNaN(n)) return "—"; const neg=n<0; const a=Math.abs(n).toLocaleString("zh-CN",{minimumFractionDigits:2,maximumFractionDigits:2}); return (neg?"-¥":"¥")+a; }
+  function fmtPct(n){ if(n==null||isNaN(n)) return "—"; const neg=n<0; return (neg?"":"+")+n.toFixed(2)+"%"; }
+  function cls(n){ if(n==null||isNaN(n)) return "flat"; return n>0?"up":(n<0?"down":"flat"); }
+  function sign(n){ return (n>0?"+":""); }
+  function dispTime(v){ if(!v) return "—"; const s = String(v).replace("T"," "); return s.length>=16 ? s.slice(5,16) : s; }
+  function genId(){ return "t_"+Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+
+  function getSells(t){
+    if(Array.isArray(t.sells) && t.sells.length){
+      return t.sells.map(s=>({
+        sellTime:String(s.sellTime||""),
+        sellPrice:num(s.sellPrice),
+        sellChangePct:(s.sellChangePct===""||s.sellChangePct==null)?"":num(s.sellChangePct),
+        sellLogic:s.sellLogic||"",
+        quantity:num(s.quantity)||0
+      })).filter(s=> num(s.sellPrice)!=null || num(s.quantity)!=null);
+    }
+    if(t.sellPrice!=="" && t.sellPrice!=null){
+      return [{ sellTime:String(t.sellTime||""), sellPrice:num(t.sellPrice), sellChangePct:(t.sellChangePct===""||t.sellChangePct==null)?"":num(t.sellChangePct), sellLogic:t.sellLogic||"", quantity:num(t.quantity)||0 }];
+    }
+    return [];
+  }
+  function lastSellTime(t){ const s=getSells(t); return s.length?s[s.length-1].sellTime:""; }
+
+  function derive(t){
+    const bp=num(t.buyPrice)||0, qty=num(t.quantity)||0;
+    const cost=bp*qty;
+    const sells=getSells(t);
+    const soldQty = sells.reduce((a,s)=>a+(num(s.quantity)||0),0);
+    const realized = sells.reduce((a,s)=> a+(num(s.sellPrice)-bp)*(num(s.quantity)||0), 0);
+    const remaining = qty - soldQty;
+    const status = sells.length===0 ? "持仓中" : (remaining<=0 ? "已平" : "部分卖出");
+    const cur = num(t.curPrice);
+    let pnlAmt=null, pnlPct=null, floating=false;
+    if(sells.length===0){
+      if(cur!=null){ pnlAmt=(cur-bp)*qty; pnlPct=cost>0?pnlAmt/cost*100:null; floating=true; }
+    } else if(remaining<=0){
+      pnlAmt=realized; pnlPct=cost>0?realized/cost*100:null; floating=false;
+    } else {
+      if(cur!=null){ pnlAmt=realized+(cur-bp)*remaining; pnlPct=cost>0?pnlAmt/cost*100:null; floating=true; }
+    }
+    return { status, pnlPct, pnlAmt, cost, realized, floating, soldQty, remaining };
+  }
+
+  // ---------- 统计 ----------
+  function computeStats(){
+    let totalCost=0, realizedTotal=0, floatingTotal=0;
+    let wins=0, losses=0, winSum=0, lossSum=0, holdDays=[];
+    const closed=[];
+    trades.forEach(t=>{
+      const cost=(num(t.buyPrice)||0)*(num(t.quantity)||0); totalCost+=cost;
+      const d=derive(t);
+      realizedTotal += d.realized;
+      if(d.floating && d.pnlAmt!=null) floatingTotal += (d.pnlAmt - d.realized);
+      if(d.status==="已平"){
+        const pnl=d.realized;
+        closed.push({sellTime:lastSellTime(t), pnl:pnl});
+        if(pnl>0){wins++; winSum+=pnl;} else if(pnl<0){losses++; lossSum+=(-pnl);}
+        const st=lastSellTime(t);
+        if(t.buyTime && st){ const dd=(new Date(st)-new Date(t.buyTime))/86400000; if(!isNaN(dd)&&dd>=0) holdDays.push(dd); }
+      }
+    });
+    const totalPnl = realizedTotal + floatingTotal;
+    const totalReturn = totalCost>0 ? totalPnl/totalCost*100 : 0;
+    const winRate = closed.length>0 ? wins/closed.length*100 : 0;
+    const avgWin = wins>0?winSum/wins:0, avgLoss = losses>0?lossSum/losses:0;
+    const plRatio = avgLoss>0 ? avgWin/avgLoss : (wins>0?Infinity:0);
+    const sorted=[...closed].sort((a,b)=> new Date(a.sellTime)-new Date(b.sellTime));
+    let peak=0, maxDD=0, eq=0;
+    sorted.forEach(c=>{ eq+=c.pnl; if(eq>peak)peak=eq; const dd=peak>0?(peak-eq)/peak:0; if(dd>maxDD)maxDD=dd; });
+    const avgHold = holdDays.length>0 ? holdDays.reduce((a,b)=>a+b,0)/holdDays.length : 0;
+    return { totalCost, totalPnl, totalReturn, winRate, wins, losses, plRatio, maxDrawdownPct:maxDD*100, avgHold, closedCount:closed.length, total:trades.length };
+  }
+
+  function renderStats(){
+    const s = computeStats();
+    const plTxt = s.plRatio===Infinity ? "∞" : (s.plRatio>0?s.plRatio.toFixed(2):"—");
+    const ddTxt = s.closedCount>0 ? "-"+s.maxDrawdownPct.toFixed(1)+"%" : "—";
+    const holdTxt = s.avgHold>0 ? s.avgHold.toFixed(1)+" 天" : "—";
+    const hero = [
+      {k:"总盈亏", v:fmtMoney(s.totalPnl), c:cls(s.totalPnl)},
+      {k:"总收益率", v:fmtPct(s.totalReturn), c:cls(s.totalReturn)},
+      {k:"胜率", v:(s.closedCount>0?s.winRate.toFixed(1):"0.0")+"%", c:"accent"},
+      {k:"最大回撤", v:ddTxt, c:"warn"}
+    ];
+    const sub = [
+      {k:"总投入本金", v:fmtMoney(s.totalCost), c:"neu"},
+      {k:"盈利 / 亏损", v:s.wins+" <span class='down'>/ "+s.losses+"</span>", c:"neu"},
+      {k:"盈亏比", v:plTxt, c:"neu"},
+      {k:"交易笔数", v:s.total, c:"neu"},
+      {k:"平均持仓", v:holdTxt, c:"neu"}
+    ];
+    document.getElementById("statsHero").innerHTML = hero.map(c=>
+      `<div class="kpi"><div class="k">${c.k}</div><div class="v num ${c.c}">${c.v}</div></div>`
+    ).join("");
+    document.getElementById("statsSub").innerHTML = sub.map(c=>
+      `<div class="mini"><div class="k">${c.k}</div><div class="v num ${c.c}">${c.v}</div></div>`
+    ).join("");
+    const cap = fmtMoney(settings.capital).replace("¥","").replace(".00","");
+    document.getElementById("capSub").textContent = `模拟总资金 ${cap} · 单股≤${Math.round(settings.maxPct*100)}%`;
+  }
+
+  // ---------- 列表 ----------
+  function getRows(){
+    let rows = trades.map(t=>({t, d:derive(t)}));
+    if(filter==="done") rows = rows.filter(r=>r.d.status==="已平");
+    else if(filter==="open") rows = rows.filter(r=>r.d.status==="持仓中");
+    if(search){
+      const q=search.toLowerCase();
+      rows = rows.filter(r=>(r.t.code||"").toLowerCase().includes(q)||(r.t.name||"").toLowerCase().includes(q));
+    }
+    const key = r=>{
+      if(sortMode==="pnlAmt") return r.d.pnlAmt==null?-Infinity:r.d.pnlAmt;
+      if(sortMode==="pnlPct") return r.d.pnlPct==null?-Infinity:r.d.pnlPct;
+      if(sortMode==="buyTime") return r.t.buyTime||"";
+      return lastSellTime(r.t)||r.t.buyTime||"";
+    };
+    rows.sort((a,b)=>{ const x=key(a), y=key(b); if(x<y)return 1; if(x>y)return -1; return 0; });
+    return rows;
+  }
+
+  function renderTable(){
+    const rows = getRows();
+    const tb = document.getElementById("tbody");
+    if(rows.length===0){
+      tb.innerHTML = `<tr><td colspan="10" class="empty">暂无记录。点击右上角「+ 新建记录」开始记账。</td></tr>`;
+      return;
+    }
+    tb.innerHTML = rows.map(({t,d})=>{
+      const pnlCls = d.pnlAmt==null?"flat":cls(d.pnlAmt);
+      const pctCls = d.pnlPct==null?"flat":cls(d.pnlPct);
+      const pnlTxt = d.pnlAmt==null ? (d.floating===false?"持仓中":"—") : fmtMoney(d.pnlAmt);
+      const pctTxt = d.pnlPct==null ? "—" : fmtPct(d.pnlPct);
+      const sells = getSells(t);
+      let sellTxt;
+      if(sells.length===0){ sellTxt = `<span class="dim">—</span>`; }
+      else if(sells.length===1){
+        const s=sells[0];
+        sellTxt = fmtPrice(s.sellPrice)+" "+(s.sellChangePct!==""&&s.sellChangePct!=null?`<span class="${cls(s.sellChangePct)}">${sign(s.sellChangePct)}${s.sellChangePct}%</span>`:"");
+      } else {
+        const tq = sells.reduce((a,s)=>a+(num(s.quantity)||0),0);
+        const avg = sells.reduce((a,s)=>a+num(s.sellPrice)*(num(s.quantity)||0),0)/Math.max(1,tq);
+        sellTxt = `<span class="num">${fmtPrice(avg)}</span> <span class="tag done" style="background:rgba(45,212,191,.10)">分${sells.length}笔</span>`;
+      }
+      const curTxt = (t.curPrice!=="" && t.curPrice!=null) ? fmtPrice(t.curPrice) : `<span class="dim">—</span>`;
+      const logicTxt = t.buyLogic ? (t.buyLogic.length>16 ? esc(t.buyLogic.slice(0,16))+"…" : esc(t.buyLogic)) : `<span class="dim">—</span>`;
+      return `<tr>
+        <td data-label="代码/名称"><div class="code num">${esc(t.code)}</div><div class="nm">${esc(t.name)}</div></td>
+        <td data-label="买入逻辑" class="logic-cell" title="${esc(t.buyLogic||"")}">${logicTxt}</td>
+        <td data-label="买入时间" class="num">${dispTime(t.buyTime)}</td>
+        <td data-label="买入价/涨幅" class="r num">${fmtPrice(t.buyPrice)} ${t.buyChangePct!==""&&t.buyChangePct!=null?`<span class="${cls(num(t.buyChangePct))}">${sign(num(t.buyChangePct))}${num(t.buyChangePct)}%</span>`:""}</td>
+        <td data-label="卖出价/涨幅" class="r num">${sellTxt}</td>
+        <td data-label="当前价" class="r num">${curTxt}</td>
+        <td data-label="盈亏比例" class="r num ${pctCls}">${pctTxt}</td>
+        <td data-label="盈亏金额" class="r num ${pnlCls}">${pnlTxt}</td>
+        <td data-label="状态"><span class="tag ${d.status==="已平"?"done":(d.status==="持仓中"?"open":"")}" style="${d.status==="部分卖出"?"background:rgba(56,189,248,.14);color:var(--accent-2)":""}">${d.status}</span></td>
+        <td data-label="操作"><span class="op" data-detail="${esc(t.id)}">详情</span><span class="op" data-edit="${esc(t.id)}">编辑</span><span class="op del" data-del="${esc(t.id)}">删除</span></td>
+      </tr>`;
+    }).join("");
+    tb.querySelectorAll("[data-detail]").forEach(el=>el.onclick=()=>openDetail(el.getAttribute("data-detail")));
+    tb.querySelectorAll("[data-edit]").forEach(el=>el.onclick=()=>openModal(el.getAttribute("data-edit")));
+    tb.querySelectorAll("[data-del]").forEach(el=>el.onclick=()=>delTrade(el.getAttribute("data-del")));
+  }
+
+  function fmtPrice(n){ if(n==null||isNaN(n)) return "—"; return Number(n).toLocaleString("zh-CN",{minimumFractionDigits:2,maximumFractionDigits:2}); }
+
+  function renderAll(){ renderStats(); renderTable(); }
+
+  // ---------- 弹窗 新建/编辑 ----------
+  const modal = document.getElementById("modal");
+  function openModal(id){
+    document.getElementById("formErr").textContent="";
+    const t = id ? trades.find(x=>x.id===id) : null;
+    document.getElementById("modalTitle").textContent = t ? "编辑交易记录" : "新建交易记录";
+    document.getElementById("modalSet").textContent = "模拟总资金 "+fmtMoney(settings.capital).replace("¥","").replace(".00","")+" · 单股≤"+Math.round(settings.maxPct*100)+"%";
+    document.getElementById("f_id").value = t?t.id:"";
+    document.getElementById("f_code").value = t?t.code:"";
+    document.getElementById("f_name").value = t?t.name:"";
+    document.getElementById("f_buyTime").value = t?t.buyTime:"";
+    document.getElementById("f_buyPrice").value = t?(t.buyPrice!=null?t.buyPrice:""):"";
+    document.getElementById("f_buyChangePct").value = t?(t.buyChangePct!==""&&t.buyChangePct!=null?t.buyChangePct:""):"";
+    document.getElementById("f_quantity").value = t?(t.quantity!=null?t.quantity:""):"";
+    document.getElementById("f_curPrice").value = t?(t.curPrice!==""&&t.curPrice!=null?t.curPrice:""):"";
+    document.getElementById("f_buyLogic").value = t?t.buyLogic:"";
+    document.getElementById("f_note").value = t?t.note:"";
+    sellLegs = buildInitialSells(t);
+    renderSellLegs();
+    lastSuggestedQty = null;
+    updateQtyHint();
+    modal.classList.add("show");
+  }
+  function closeModal(){ modal.classList.remove("show"); }
+
+  function buildInitialSells(t){
+    if(!t) return [];
+    if(Array.isArray(t.sells) && t.sells.length){
+      return t.sells.map(s=>({
+        sellTime:String(s.sellTime||""),
+        sellPrice:(s.sellPrice===""||s.sellPrice==null)?"":s.sellPrice,
+        sellChangePct:(s.sellChangePct===""||s.sellChangePct==null)?"":s.sellChangePct,
+        sellLogic:s.sellLogic||"",
+        quantity:(s.quantity===""||s.quantity==null)?"":s.quantity
+      }));
+    }
+    if(t.sellPrice!=="" && t.sellPrice!=null){
+      return [{ sellTime:String(t.sellTime||""), sellPrice:t.sellPrice, sellChangePct:(t.sellChangePct===""||t.sellChangePct==null)?"":t.sellChangePct, sellLogic:t.sellLogic||"", quantity:(t.quantity!=null?t.quantity:"") }];
+    }
+    return [];
+  }
+
+  function renderSellLegs(){
+    const list = document.getElementById("sellLegList");
+    const qty = num(document.getElementById("f_quantity").value)||0;
+    const bp = num(document.getElementById("f_buyPrice").value)||0;
+    list.innerHTML = sellLegs.map((s,i)=>{
+      const sp=num(s.sellPrice), sq=num(s.quantity);
+      let legPnl="";
+      if(sp!=null && sp>0 && sq!=null && sq>0){ const p=(sp-bp)*sq; legPnl=`<span class="num ${cls(p)}">${fmtMoney(p)}</span>`; }
+      return `<div class="sell-leg">
+        <div class="sell-leg-head"><span>第 ${i+1} 笔卖出</span><button type="button" class="op del" data-rmleg="${i}">移除</button></div>
+        <div class="sell-leg-grid">
+          <div class="field"><label>卖出时间</label><input type="datetime-local" data-leg="sellTime" data-i="${i}" value="${s.sellTime||""}"></div>
+          <div class="field"><label>卖出价</label><input type="number" step="0.01" data-leg="sellPrice" data-i="${i}" value="${s.sellPrice!==""&&s.sellPrice!=null?s.sellPrice:""}"></div>
+          <div class="field"><label>卖出时涨幅%</label><input type="number" step="0.01" data-leg="sellChangePct" data-i="${i}" value="${s.sellChangePct!==""&&s.sellChangePct!=null?s.sellChangePct:""}"></div>
+          <div class="field"><label>数量(股)</label><input type="number" step="1" data-leg="quantity" data-i="${i}" value="${s.quantity!==""&&s.quantity!=null?s.quantity:""}"></div>
+        </div>
+        <div class="field full"><label>卖出逻辑</label><textarea data-leg="sellLogic" data-i="${i}" placeholder="为什么卖这笔？止盈 / 止损 / 逻辑变化…">${esc(s.sellLogic||"")}</textarea></div>
+        ${legPnl?`<div class="sell-leg-foot">该笔已实现盈亏：${legPnl}</div>`:""}
+      </div>`;
+    }).join("");
+    list.querySelectorAll("[data-leg]").forEach(el=>{
+      el.oninput = el.onchange = ()=>{
+        const i=+el.getAttribute("data-i"); const k=el.getAttribute("data-leg");
+        sellLegs[i][k] = (k==="sellLogic" || k==="sellTime") ? el.value : (el.value===""?"":num(el.value));
+        updateSellSummary();
+      };
+    });
+    list.querySelectorAll("[data-rmleg]").forEach(el=>el.onclick=()=>{ sellLegs.splice(+el.getAttribute("data-rmleg"),1); renderSellLegs(); updateQtyHint(); });
+    updateSellSummary();
+  }
+  function updateSellSummary(){
+    const sumEl = document.getElementById("sellSummary");
+    const qty = num(document.getElementById("f_quantity").value)||0;
+    let sold=0; sellLegs.forEach(s=>{ const q=num(s.quantity); if(q!=null&&!isNaN(q)) sold+=q; });
+    if(sellLegs.length===0){ sumEl.innerHTML = `<span class="dim">暂无卖出，当前为持仓中（可添加分批卖出）</span>`; return; }
+    const remaining = qty - sold;
+    sumEl.innerHTML = `已卖出 <b class="num">${sold.toLocaleString("zh-CN")}</b> / 共 <b class="num">${qty.toLocaleString("zh-CN")}</b> 股，剩余 <b class="num ${remaining<0?'down':(remaining>0?'accent':'neu')}">${remaining.toLocaleString("zh-CN")}</b> 股${remaining<0?' <span class="warn">⚠ 卖出超过买入数量</span>':''}`;
+  }
+
+  const detailModal = document.getElementById("detailModal");
+  function openDetail(id){
+    const t = trades.find(x=>x.id===id); if(!t) return;
+    const d = derive(t);
+    const sells = getSells(t);
+    const bp = num(t.buyPrice)||0, qty=num(t.quantity)||0;
+    const cur = num(t.curPrice);
+    let legsHtml = `<table class="leg-tbl"><thead><tr><th>笔次</th><th>卖出时间</th><th class="r">卖出价</th><th class="r">涨幅</th><th class="r">数量(股)</th><th class="r">已实现盈亏</th></tr></thead><tbody>`;
+    sells.forEach((s,i)=>{
+      const sp=num(s.sellPrice), sq=num(s.quantity);
+      const p=(sp-bp)*(sq||0);
+      legsHtml += `<tr><td>${i+1}</td><td class="num">${dispTime(s.sellTime)}</td><td class="r num">${fmtPrice(sp)}</td><td class="r num ${cls(num(s.sellChangePct))}">${s.sellChangePct!==""&&s.sellChangePct!=null?sign(s.sellChangePct)+s.sellChangePct+"%":"—"}</td><td class="r num">${sq?sq.toLocaleString("zh-CN"):"—"}</td><td class="r num ${cls(p)}">${fmtMoney(p)}</td></tr>`;
+      if(s.sellLogic) legsHtml += `<tr><td colspan="6" style="color:var(--muted); font-size:12px; border-bottom:1px solid var(--border-soft);">卖出逻辑：${esc(s.sellLogic)}</td></tr>`;
+    });
+    legsHtml += `</tbody></table>`;
+    if(sells.length===0) legsHtml = `<div class="dim" style="font-size:13px;">尚未卖出（持仓中）</div>`;
+    const statusTag = `<span class="tag ${d.status==="已平"?"done":"open"}" style="${d.status==="部分卖出"?"background:rgba(56,189,248,.14);color:var(--accent-2)":""}">${d.status}</span>`;
+    const floatVal = (d.floating && d.pnlAmt!=null) ? (d.pnlAmt - d.realized) : null;
+    const html = `
+      <div class="detail-sec">
+        <h3>基本信息</h3>
+        <div class="detail-grid">
+          <div class="detail-row"><span class="k">代码 / 名称</span><span class="v num">${esc(t.code)} ${esc(t.name)}</span></div>
+          <div class="detail-row"><span class="k">状态</span><span class="v">${statusTag}</span></div>
+          <div class="detail-row"><span class="k">买入时间</span><span class="v num">${dispTime(t.buyTime)}</span></div>
+          <div class="detail-row"><span class="k">买入价 / 涨幅</span><span class="v num">${fmtPrice(bp)} ${t.buyChangePct!==""&&t.buyChangePct!=null?`<span class="${cls(num(t.buyChangePct))}">${sign(num(t.buyChangePct))}${num(t.buyChangePct)}%</span>`:""}</span></div>
+          <div class="detail-row"><span class="k">买入数量</span><span class="v num">${qty.toLocaleString("zh-CN")} 股</span></div>
+          <div class="detail-row"><span class="k">当前价</span><span class="v num">${cur!=null?fmtPrice(cur):"—"}</span></div>
+        </div>
+      </div>
+      <div class="detail-sec">
+        <h3>买入逻辑</h3>
+        <div class="detail-logic">${t.buyLogic?esc(t.buyLogic):"—"}</div>
+      </div>
+      <div class="detail-sec">
+        <h3>卖出明细（${sells.length} 笔）</h3>
+        ${legsHtml}
+      </div>
+      <div class="detail-sec">
+        <h3>盈亏汇总</h3>
+        <div class="detail-summary">
+          <div class="mini"><div class="k">已实现盈亏</div><div class="v num ${cls(d.realized)}">${fmtMoney(d.realized)}</div></div>
+          <div class="mini"><div class="k">浮盈浮亏</div><div class="v num ${floatVal!=null?cls(floatVal):'flat'}">${floatVal!=null?fmtMoney(floatVal):"—"}</div></div>
+          <div class="mini"><div class="k">总盈亏</div><div class="v num ${cls(d.pnlAmt)}">${d.pnlAmt!=null?fmtMoney(d.pnlAmt):"—"}</div></div>
+        </div>
+        <div class="detail-row" style="margin-top:12px;"><span class="k">已卖出 / 剩余</span><span class="v num">${d.soldQty.toLocaleString("zh-CN")} / ${d.remaining.toLocaleString("zh-CN")} 股</span></div>
+        ${t.note?`<div class="detail-row"><span class="k">备注</span><span class="v">${esc(t.note)}</span></div>`:""}
+      </div>
+    `;
+    document.getElementById("detailBody").innerHTML = html;
+    detailModal.classList.add("show");
+  }
+
+  function updateQtyHint(){
+    const bp = num(document.getElementById("f_buyPrice").value);
+    const qtyEl = document.getElementById("f_quantity");
+    const hint = document.getElementById("qtyHint");
+    if(bp!=null && bp>0){
+      const limit = settings.capital * settings.maxPct;
+      const sug = Math.floor(limit / bp);
+      lastSuggestedQty = sug;
+      let html = `单股上限 ${Math.round(settings.maxPct*100)}% = <b>${fmtMoney(limit)}</b>；按买入价自动算出 可买 ≈ <b>${sug.toLocaleString("zh-CN")} 股</b>`;
+      const q = num(qtyEl.value);
+      if(q!=null && q>0){
+        const cost = bp*q;
+        if(cost > limit) html += `<br><span class="warn">⚠ 当前数量对应成本 ${fmtMoney(cost)}，已超过单股上限</span>`;
+      }
+      hint.innerHTML = html;
+    } else { hint.innerHTML = ""; }
+  }
+
+  async function saveTrade(){
+    const err = document.getElementById("formErr");
+    err.textContent="";
+    const code = document.getElementById("f_code").value.trim();
+    const name = document.getElementById("f_name").value.trim();
+    const buyPrice = num(document.getElementById("f_buyPrice").value);
+    const quantity = num(document.getElementById("f_quantity").value);
+    if(!code){ err.textContent="请填写股票代码"; return; }
+    if(!name){ err.textContent="请填写股票名称"; return; }
+    if(buyPrice==null || buyPrice<=0){ err.textContent="买入价必须为正数"; return; }
+    if(quantity==null || quantity<=0){ err.textContent="数量(股)必须为正数"; return; }
+    const curPriceRaw = document.getElementById("f_curPrice").value;
+    const curPrice = curPriceRaw==="" ? "" : num(curPriceRaw);
+    if(curPrice!=="" && (curPrice==null||curPrice<=0)){ err.textContent="当前价必须为正数或留空"; return; }
+
+    // 构建卖出笔次
+    let soldQty = 0;
+    const sells = [];
+    for(let i=0;i<sellLegs.length;i++){
+      const s = sellLegs[i];
+      const sp = (s.sellPrice===""||s.sellPrice==null)?"":num(s.sellPrice);
+      const sq = (s.quantity===""||s.quantity==null)?"":num(s.quantity);
+      if(sp==="" && sq==="") continue; // 空白笔跳过
+      if(sp===""||sp==null||sp<=0){ err.textContent=`第 ${i+1} 笔卖出价必须为正数`; return; }
+      if(sq===""||sq==null||sq<=0){ err.textContent=`第 ${i+1} 笔卖出数量必须为正数`; return; }
+      soldQty += sq;
+      sells.push({
+        sellTime: String(s.sellTime||""),
+        sellPrice: sp,
+        sellChangePct: (s.sellChangePct===""||s.sellChangePct==null)?"":num(s.sellChangePct),
+        sellLogic: s.sellLogic||"",
+        quantity: sq
+      });
+    }
+    if(soldQty > quantity){ err.textContent=`卖出总数量 ${soldQty} 超过买入数量 ${quantity}：请减少某笔卖出数量后再保存（如需分多笔，先调小已有笔次的数量）`; return; }
+
+    const id = document.getElementById("f_id").value;
+    const rec = {
+      id: id || genId(),
+      code, name,
+      buyTime: document.getElementById("f_buyTime").value,
+      buyPrice: buyPrice,
+      buyChangePct: document.getElementById("f_buyChangePct").value===""?"":num(document.getElementById("f_buyChangePct").value),
+      quantity: quantity,
+      curPrice: curPrice,
+      sells: sells,
+      buyLogic: document.getElementById("f_buyLogic").value,
+      sellLogic: "",
+      note: document.getElementById("f_note").value
+    };
+    if(id){ await apiUpdate(rec); toast("已更新记录"); }
+    else { await apiAdd(rec); toast("已保存记录"); }
+    renderAll(); closeModal();
+  }
+
+  async function delTrade(id){
+    const t = trades.find(x=>x.id===id);
+    const ok = await confirmDialog("删除记录", `确定删除「${t?t.code+" "+t.name:"该记录"}」？此操作不可撤销。`);
+    if(!ok) return;
+    await apiRemove(id); renderAll(); toast("已删除");
+  }
+
+  // ---------- 导入 / 导出 ----------
+  function exportJSON(){
+    const data = { version:VERSION, exportedAt:new Date().toISOString(), settings:settings, trades:trades };
+    const blob = new Blob([JSON.stringify(data,null,2)], {type:"application/json"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const ts = new Date().toISOString().slice(0,16).replace(/[:T]/g,"-");
+    a.href = url; a.download = `A股看盘模拟交易台账-导出-${ts}.json`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    toast("已导出 JSON");
+  }
+  function importJSON(file){
+    const reader = new FileReader();
+    reader.onload = async function(){
+      let data;
+      try{ data = JSON.parse(reader.result); }catch(e){ toast("文件解析失败：不是合法 JSON"); return; }
+      const imported = Array.isArray(data) ? data : (data.trades||[]);
+      if(!Array.isArray(imported)){ toast("文件中未找到交易记录"); return; }
+      const ok = await confirmDialog("导入方式", `导入 ${imported.length} 条记录。确定=覆盖现有数据，取消=合并去重（同 ID 以导入为准）。`);
+      if(ok){
+        await apiBulk({ trades: imported.map(normalize), settings: data.settings||settings, mode:"overwrite" });
+        toast("已覆盖导入 "+imported.length+" 条");
+      } else {
+        await apiBulk({ trades: imported.map(normalize), settings: settings, mode:"merge" });
+        toast("已合并导入，共 "+trades.length+" 条");
+      }
+      renderAll();
+    };
+    reader.readAsText(file);
+  }
+  function normalize(t){
+    const sells = Array.isArray(t.sells) && t.sells.length
+      ? t.sells.map(s=>({
+          sellTime:String(s.sellTime||""),
+          sellPrice:(s.sellPrice===""||s.sellPrice==null)?"":num(s.sellPrice),
+          sellChangePct:(s.sellChangePct===""||s.sellChangePct==null)?"":num(s.sellChangePct),
+          sellLogic:s.sellLogic||"",
+          quantity:(s.quantity===""||s.quantity==null)?"":num(s.quantity)
+        })).filter(s=> (s.sellPrice!==""&&s.sellPrice!=null) || (s.quantity!==""&&s.quantity!=null) )
+      : ( (t.sellPrice!==""&&t.sellPrice!=null) ? [{
+          sellTime:String(t.sellTime||""), sellPrice:num(t.sellPrice),
+          sellChangePct:(t.sellChangePct===""||t.sellChangePct==null)?"":num(t.sellChangePct),
+          sellLogic:t.sellLogic||"", quantity:num(t.quantity)||0
+        }] : [] );
+    return {
+      id: t.id || genId(),
+      code: t.code||"", name: t.name||"",
+      buyTime: t.buyTime||"", buyPrice: num(t.buyPrice)||0,
+      buyChangePct: t.buyChangePct===""||t.buyChangePct==null?"":num(t.buyChangePct),
+      quantity: num(t.quantity)||0, curPrice: t.curPrice===""||t.curPrice==null?"":num(t.curPrice),
+      sells: sells,
+      buyLogic: t.buyLogic||"", sellLogic: t.sellLogic||"", note: t.note||""
+    };
+  }
+
+  // ---------- 设置 ----------
+  const setModal = document.getElementById("setModal");
+  function openSettings(){
+    document.getElementById("s_capital").value = settings.capital;
+    document.getElementById("s_maxPct").value = Math.round(settings.maxPct*100);
+    setModal.classList.add("show");
+  }
+  async function saveSettingsModal(){
+    const cap = num(document.getElementById("s_capital").value);
+    const pct = num(document.getElementById("s_maxPct").value);
+    if(cap==null||cap<=0){ toast("总资金需为正数"); return; }
+    if(pct==null||pct<=0||pct>100){ toast("上限比例需在 1-100"); return; }
+    settings = { capital: cap, maxPct: pct/100 };
+    await apiSaveSettings(settings); setModal.classList.remove("show"); renderStats(); toast("设置已保存");
+  }
+  async function clearAll(){
+    const ok = await confirmDialog("清空全部", "将删除所有交易记录，且不可撤销。确定继续？");
+    if(!ok) return;
+    await apiBulk({ trades:[], settings:settings, mode:"overwrite" });
+    renderAll(); setModal.classList.remove("show"); toast("已清空");
+  }
+
+  // ---------- 确认弹窗 ----------
+  const confirmModal = document.getElementById("confirmModal");
+  let confirmResolver = null;
+  function confirmDialog(title, msg){
+    document.getElementById("confirmTitle").textContent = title;
+    document.getElementById("confirmMsg").textContent = msg;
+    confirmModal.classList.add("show");
+    return new Promise(res=>{ confirmResolver = res; });
+  }
+  function resolveConfirm(v){ confirmModal.classList.remove("show"); if(confirmResolver){ confirmResolver(v); confirmResolver=null; } }
+
+  // ---------- toast ----------
+  let toastTimer=null;
+  function toast(msg){
+    const el = document.getElementById("toast");
+    el.textContent = msg; el.classList.add("show");
+    clearTimeout(toastTimer); toastTimer = setTimeout(()=>el.classList.remove("show"), 1800);
+  }
+
+  // ---------- 模式标识 + 轮询 ----------
+  function setModeTag(){
+    const el = document.getElementById("modeTag");
+    if(backendMode){ el.textContent="共享服务器"; el.className="mode shared"; }
+    else { el.textContent="本机"; el.className="mode local"; }
+  }
+  async function refresh(){
+    const d = await apiGetAll();
+    trades = (d.trades||[]).map(normalize); settings = d.settings||settings;
+    renderAll();
+  }
+  function startPoll(){
+    if(!backendMode) return;
+    setInterval(async ()=>{ try{ await refresh(); }catch(e){} }, 8000);
+  }
+
+  // ---------- 事件绑定 ----------
+  document.getElementById("btnNew").onclick = ()=>openModal(null);
+  document.getElementById("btnCancel").onclick = closeModal;
+  document.getElementById("btnSave").onclick = saveTrade;
+  document.getElementById("btnAddLeg").onclick = ()=>{ sellLegs.push({sellTime:"",sellPrice:"",sellChangePct:"",sellLogic:"",quantity:""}); renderSellLegs(); updateQtyHint(); };
+  document.getElementById("btnDetailClose").onclick = ()=>detailModal.classList.remove("show");
+  document.getElementById("btnSettings").onclick = openSettings;
+  document.getElementById("btnSetCancel").onclick = ()=>setModal.classList.remove("show");
+  document.getElementById("btnSetSave").onclick = saveSettingsModal;
+  document.getElementById("btnClear").onclick = clearAll;
+  document.getElementById("btnExport").onclick = exportJSON;
+  document.getElementById("btnImport").onclick = ()=>document.getElementById("fileInput").click();
+  document.getElementById("btnRefresh").onclick = ()=>refresh().then(()=>toast("已刷新"));
+  document.getElementById("fileInput").onchange = e=>{ if(e.target.files[0]) importJSON(e.target.files[0]); e.target.value=""; };
+  document.getElementById("confirmOk").onclick = ()=>resolveConfirm(true);
+  document.getElementById("confirmCancel").onclick = ()=>resolveConfirm(false);
+  document.getElementById("search").oninput = e=>{ search=e.target.value.trim(); renderTable(); };
+  document.getElementById("sort").onchange = e=>{ sortMode=e.target.value; renderTable(); };
+  document.querySelectorAll(".chip").forEach(c=>c.onclick=()=>{
+    document.querySelectorAll(".chip").forEach(x=>x.classList.remove("on"));
+    c.classList.add("on"); filter=c.getAttribute("data-filter"); renderTable();
+  });
+  document.getElementById("f_buyPrice").oninput = updateQtyHint;
+  document.getElementById("f_quantity").oninput = updateQtyHint;
+  [modal,setModal,confirmModal,detailModal].forEach(m=>m.addEventListener("click",e=>{ if(e.target===m && m!==confirmModal) m.classList.remove("show"); }));
+  document.addEventListener("keydown",e=>{ if(e.key==="Escape"){ modal.classList.remove("show"); setModal.classList.remove("show"); detailModal.classList.remove("show"); } });
+
+  // ---------- 启动 ----------
+  (async function init(){
+    await detectBackend();
+    setModeTag();
+    const d = await apiGetAll();
+    trades = (d.trades||[]).map(normalize); settings = d.settings||{capital:1000000,maxPct:0.30};
+    renderAll(); startPoll();
+  })();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+{
+  "trades": [
+    {
+      "id": "demo-000892-20260716",
+      "code": "000892",
+      "name": "欢瑞世纪",
+      "buyTime": "2026-07-16T10:35:00",
+      "buyPrice": 3.70,
+      "buyChangePct": 5.0,
+      "buyLogic": "打板策略：07-15 收 3.52；07-16 竞价低开 3.48（-1.14%）后盘中强势拉升，我在当日涨幅约 +5%（≈3.70 元）时介入，博弈封板溢价。当日该股最终封死涨停收 3.87（+9.94%）。",
+      "sellTime": "",
+      "sellPrice": "",
+      "sellChangePct": "",
+      "sellLogic": "",
+      "quantity": 81000,
+      "curPrice": 3.48
+    }
+  ],
+  "settings": {
+    "capital": 1000000,
+    "maxPct": 0.3
+  }
+}
